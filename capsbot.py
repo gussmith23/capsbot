@@ -3,8 +3,10 @@ import re
 import os
 import random
 from telebot import types
-from secret_vars import *
+from secret_vars import TOKEN, CAPSTATS_TOKEN, CAPSTATS_URL
 from game import Game
+import requests
+from time import time
 
 bot = telebot.TeleBot(TOKEN)
 
@@ -137,9 +139,73 @@ def end_game(game):
         bot.send_message(game.get_chat_id(), 'Final Score: %s: %d  %s: %d\n'%
                 (teams[0],score[0],teams[1],score[1]) + u'THAT\'S CAPS \U0001f44f \U0001f44f \U0001f44f')
 
+        url = post_to_capstats(game)
+        if url is not None:
+            bot.send_message(game.get_chat_id(), 'Game added to capstats: {0}'.format(url))
+
         del games[game.get_game_id()]
     except KeyError:
         return
+
+def post_to_capstats(game):
+    """Posts a game to capstats.
+
+    Returns URL of new game if successful, and None otherwise."""
+
+    # Step 1: get players.
+    ids = {}
+    for player_username in game.get_names():
+        result = requests.get(CAPSTATS_URL + "/player",
+                              params={ 'telegramUsername' : player_username })
+        if result.status_code != 200:
+            # TODO use logging package
+            print("Response code from capstats: {0}. Not posting game to server.".format(result.status_code))
+            return
+
+        json = result.json()
+
+        if len(json) > 1:
+            # TODO use logging package
+            print("Warning: found more than one result for username {0}:".format(player_username))
+
+        elif len(json) == 0:
+            # TODO use logging package
+            print("Username {0} not in capstats, adding now.".format(player_username))
+
+            result = requests.post(CAPSTATS_URL + "/player",
+                                    params={ 'key' : CAPSTATS_TOKEN },
+                                    json={ 'telegramUsername' : player_username })
+
+            if result.status_code != 201:
+                print("Error posting player: {0}".format(result.status_code))
+                return
+
+            ids[player_username] = result.json()['id']
+
+        else: # there was only one result. this is what we expect!
+           ids[player_username] = json[0]['id']
+
+    # Step 2: post game.
+    scores = game.get_score()
+    game = {
+        'teams' : {
+            0: [ ids[game.get_names()[0]], ids[game.get_names()[1]] ],
+            1: [ ids[game.get_names()[2]], ids[game.get_names()[3]] ]
+        },
+        'scores' : {
+            0: scores[0],
+            1: scores[1]
+        },
+        'time': time()
+    }
+    result = requests.post(CAPSTATS_URL + "/game",
+                            params={ 'key' : CAPSTATS_TOKEN },
+                            json=game)
+    if result.status_code != 200:
+        print("Error posting player: {0}".format(result.status_code))
+        return
+
+    return "{0}/game/{1}".format(CAPSTATS_URL, result.json()['id'])
 
 def create_markup(game):
     names = game.get_names()
