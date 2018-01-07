@@ -192,9 +192,15 @@ def post_to_capstats(game):
             0: [ ids[game.get_names()[0]], ids[game.get_names()[1]] ],
             1: [ ids[game.get_names()[2]], ids[game.get_names()[3]] ]
         },
-        'scores' : {
+        'points' : {
             0: scores[0],
             1: scores[1]
+        },
+        'playerpoints' : {
+            ids[game.get_names()[0]] : game.get_individual_scores()[0],
+            ids[game.get_names()[1]] : game.get_individual_scores()[1],
+            ids[game.get_names()[2]] : game.get_individual_scores()[2],
+            ids[game.get_names()[3]] : game.get_individual_scores()[3]
         },
         'time': time()
     }
@@ -244,8 +250,4 @@ def get_score_text(game):
 
     return update_text
 
-while True:
-    try:
-        bot.polling()
-    except:
-        print('error on bot.polling')
+bot.polling()
